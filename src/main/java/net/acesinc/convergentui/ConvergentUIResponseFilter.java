@@ -5,11 +5,9 @@
  */
 package net.acesinc.convergentui;
 
-import com.netflix.zuul.context.RequestContext;
 import java.net.MalformedURLException;
 import java.net.URL;
-import net.acesinc.convergentui.content.ContentResponse;
-import net.acesinc.convergentui.content.ContentService;
+
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -18,6 +16,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import com.netflix.zuul.context.RequestContext;
+
+import net.acesinc.convergentui.content.ContentResponse;
+import net.acesinc.convergentui.content.ContentService;
 
 /**
  * The ConvergentUIResponseFilter handles the html coming back from your main
@@ -36,7 +39,7 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 	@Override
 	public Object run() {
 		
-		String origBody = contentManager.getDownstreamResponse();
+		final String origBody = this.contentManager.getDownstreamResponse();
 		if (origBody == null || origBody.isEmpty()) {
 			return null;
 		}
@@ -44,52 +47,56 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 		String composedBody = null;
 		log.trace("Response from downstream server: " + origBody);
 		
-		Document doc = Jsoup.parse(origBody);
-		if (hasReplaceableElements(doc)) {
+		final Document doc = Jsoup.parse(origBody);
+		if (ConvergentUIResponseFilter.hasReplaceableElements(doc)) {
 			log.debug("We have replaceable elements. Let's get em!");
-			Elements elementsToUpdate = doc.select("div[data-loc]");
-			for (Element e : elementsToUpdate) {
-				StringBuilder content = new StringBuilder();
-				String location = e.dataset().get("loc");
-				String fragmentName = e.dataset().get("fragment-name");
-				String cacheName = e.dataset().get("cache-name");
-				boolean useCaching = !Boolean.valueOf(e.dataset().get("disable-caching"));
-				boolean failQuietly = Boolean.valueOf(e.dataset().get("fail-quietly"));
-				boolean replaceOuter = e.dataset().get("replace-outer") == null ? true : Boolean.valueOf(e.dataset().get("replace-outer"));
+			final Elements elementsToUpdate = doc.select("div[data-loc]");
+			for (final Element e : elementsToUpdate) {
+				final StringBuilder content = new StringBuilder();
+				final String location = e.dataset().get("loc");
+				final String fragmentName = e.dataset().get("fragment-name");
+				final String cacheName = e.dataset().get("cache-name");
+				final boolean useCaching = !Boolean.parseBoolean(e.dataset().get("disable-caching"));
+				final boolean failQuietly = Boolean.parseBoolean(e.dataset().get("fail-quietly"));
+				final boolean replaceOuter = e.dataset().get("replace-outer") == null
+						? true
+						: Boolean.parseBoolean(e.dataset().get("replace-outer"));
+				
 				URL url = null;
 				try {
 					url = new URL(location);
-					String protocol = url.getProtocol();
-					String service = url.getHost();
+					final String protocol = url.getProtocol();
+					final String service = url.getHost();
 					
 					log.debug("Fetching content at location [ " + location + " ] with cacheName = [ " + cacheName + " ]");
 					
 					try {
-						RequestContext context = RequestContext.getCurrentContext();
-						ContentResponse response = contentManager.getContentFromService(location, cacheName, useCaching, context);
+						final RequestContext context = RequestContext.getCurrentContext();
+						final ContentResponse response =
+								this.contentManager.getContentFromService(location, cacheName, useCaching, context);
 						
 						log.trace(response.toString());
 						
 						if (!response.isError()) {
-							Object resp = response.getContent();
+							final Object resp = response.getContent();
 							if (String.class.isAssignableFrom(resp.getClass())) {
-								String subContentResponse = (String) resp;
+								final String subContentResponse = (String) resp;
 								// TODO You better trust the source of your downstream HTML!
-								// String cleanedContent = Jsoup.clean(subContentResponse, Whitelist.basic()); //this totally stripped the
-								// html out...
-								Document subDocument = Jsoup.parse(subContentResponse);
+								// String cleanedContent = Jsoup.clean(subContentResponse, Whitelist.basic());
+								// this totally stripped the html out...
+								final Document subDocument = Jsoup.parse(subContentResponse);
 								
 								if (fragmentName != null) {
-									Elements fragments = subDocument.select("div[data-fragment-name=\"" + fragmentName + "\"]");
+									final Elements fragments = subDocument.select("div[data-fragment-name=\"" + fragmentName + "\"]");
 									
 									if (fragments != null && fragments.size() > 0) {
 										if (fragments.size() == 1) {
-											Element frag = fragments.first();
+											final Element frag = fragments.first();
 											
 											// need to see if there are images that we need to replace the urls on
-											Elements images = frag.select("img");
-											for (Element i : images) {
-												String src = i.attr("src");
+											final Elements images = frag.select("img");
+											for (final Element i : images) {
+												final String src = i.attr("src");
 												if (src.startsWith("/") && !src.startsWith("//")) {
 													i.attr("src", "/cui-req://" + protocol + "://" + service + src);
 												} // else what do we do about relative urls?
@@ -99,7 +106,7 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 											
 										}
 										else {
-											for (Element frag : fragments) {
+											for (final Element frag : fragments) {
 												content.append(frag.toString()).append("\n\n");
 											}
 										}
@@ -110,9 +117,10 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 											content.append("<div class='cui-error'></div>");
 										}
 										else {
-											content.append(
-													"<span class='cui-error'>Failed getting content from remote service. Possible reason in reponse below</span>");
-											content.append(subDocument.toString());
+											content.append("<span class='cui-error'>")
+													.append("Failed getting content from remote service. Possible reason in reponse below")
+													.append("</span>")
+													.append(subDocument.toString());
 										}
 									}
 								}
@@ -124,8 +132,9 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 							else {
 								// not text...
 								if (!failQuietly) {
-									content.append(
-											"<span class='cui-error'>Failed getting content from remote service. Reason: content was not text</span>");
+									content.append("<span class='cui-error'>")
+											.append("Failed getting content from remote service. Reason: content was not text")
+											.append("</span>");
 								}
 								else {
 									content.append("<div class='cui-error'></div>");
@@ -135,10 +144,9 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 						}
 						else {
 							if (!failQuietly) {
-								content.append(
-										"<span class='cui-error'>Failed getting content from remote service. Reason: "
-												+ response.getMessage()
-												+ "</span>");
+								content.append("<span class='cui-error'>Failed getting content from remote service. Reason: ")
+										.append(response.getMessage())
+										.append("</span>");
 							}
 							else {
 								content.append("<div class='cui-error'></div>");
@@ -150,7 +158,7 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 							e.html(content.toString());
 						}
 					}
-					catch (Throwable t) {
+					catch (final Throwable t) {
 						if (!failQuietly) {
 							e.html(
 									"<span class='cui-error'>Failed getting content from remote service. Reason: "
@@ -165,11 +173,12 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 						e.unwrap();
 					}
 				}
-				catch (MalformedURLException ex) {
+				catch (final MalformedURLException ex) {
 					log.warn("location was invalid: [ " + location + " ]", ex);
 					if (!failQuietly) {
-						content.append(
-								"<span class='cui-error'>Failed getting content from remote service. Reason: data-loc was an invalid location.</span>");
+						content.append("<span class='cui-error'>")
+								.append("Failed getting content from remote service. Reason: data-loc was an invalid location.")
+								.append("</span>");
 					}
 					else {
 						content.append("<div class='cui-error'></div>");
@@ -185,23 +194,22 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 		}
 		
 		try {
-			addResponseHeaders();
+			this.addResponseHeaders();
 			if (composedBody != null && !composedBody.isEmpty()) {
-				writeResponse(composedBody, getMimeType(RequestContext.getCurrentContext()));
+				this.writeResponse(composedBody, this.getMimeType(RequestContext.getCurrentContext()));
 			}
 			else {
-				writeResponse(origBody, getMimeType(RequestContext.getCurrentContext()));
+				this.writeResponse(origBody, this.getMimeType(RequestContext.getCurrentContext()));
 			}
 		}
-		catch (Exception ex) {
+		catch (final Exception ex) {
 			log.error("Error sending response", ex);
 			
 		}
 		return null;
 	}
 	
-	protected boolean hasReplaceableElements(Document doc) {
+	protected static boolean hasReplaceableElements(final Document doc) {
 		return doc.select("div[data-loc]").size() > 0;
 	}
-	
 }
