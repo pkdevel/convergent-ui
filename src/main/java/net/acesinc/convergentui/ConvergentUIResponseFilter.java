@@ -7,7 +7,9 @@ package net.acesinc.convergentui;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Collection;
 
+import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -18,6 +20,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.netflix.zuul.context.RequestContext;
+
+import static java.util.Arrays.asList;
 
 import net.acesinc.convergentui.content.ContentResponse;
 import net.acesinc.convergentui.content.ContentService;
@@ -31,7 +35,26 @@ import net.acesinc.convergentui.content.ContentService;
 @Component
 public class ConvergentUIResponseFilter extends BaseResponseFilter {
 	
-	private static final Logger log = LoggerFactory.getLogger(ConvergentUIResponseFilter.class);
+	static final class Tuple {
+		
+		String node, attribute;
+		
+		private Tuple(final String node, final String attribute) {
+			this.node = node;
+			this.attribute = attribute;
+		}
+		
+		static Tuple of(final String node, final String attribute) {
+			return new Tuple(node, attribute);
+		}
+	}
+	
+	private static final Logger LOGGER = LoggerFactory.getLogger(ConvergentUIResponseFilter.class);
+	
+	private static final Collection<Tuple> SERVICE_LOCATIONS = asList(
+			Tuple.of("img", "src"),
+			Tuple.of("script", "src"),
+			Tuple.of("link", "href"));
 	
 	@Autowired
 	private ContentService contentManager;
@@ -45,37 +68,31 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 		}
 		
 		String composedBody = null;
-		log.trace("Response from downstream server: " + origBody);
+		LOGGER.trace("Response from downstream server: {}", origBody);
 		
 		final Document doc = Jsoup.parse(origBody);
-		if (ConvergentUIResponseFilter.hasReplaceableElements(doc)) {
-			log.debug("We have replaceable elements. Let's get em!");
+		if (hasReplaceableElements(doc)) {
+			LOGGER.debug("We have replaceable elements. Let's get em!");
 			final Elements elementsToUpdate = doc.select("div[data-loc]");
 			for (final Element e : elementsToUpdate) {
 				final StringBuilder content = new StringBuilder();
 				final String location = e.dataset().get("loc");
-				final String fragmentName = e.dataset().get("fragment-name");
 				final String cacheName = e.dataset().get("cache-name");
 				final boolean useCaching = !Boolean.parseBoolean(e.dataset().get("disable-caching"));
 				final boolean failQuietly = Boolean.parseBoolean(e.dataset().get("fail-quietly"));
-				final boolean replaceOuter = e.dataset().get("replace-outer") == null
-						? true
-						: Boolean.parseBoolean(e.dataset().get("replace-outer"));
 				
-				URL url = null;
 				try {
-					url = new URL(location);
-					final String protocol = url.getProtocol();
-					final String service = url.getHost();
+					// validation of service location uri
+					final URL url = new URL(location);
 					
-					log.debug("Fetching content at location [ " + location + " ] with cacheName = [ " + cacheName + " ]");
+					LOGGER.debug("Fetching content at location [ " + location + " ] with cacheName = [ " + cacheName + " ]");
 					
 					try {
 						final RequestContext context = RequestContext.getCurrentContext();
 						final ContentResponse response =
 								this.contentManager.getContentFromService(location, cacheName, useCaching, context);
 						
-						log.trace(response.toString());
+						LOGGER.trace(response.toString());
 						
 						if (!response.isError()) {
 							final Object resp = response.getContent();
@@ -86,24 +103,15 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 								// this totally stripped the html out...
 								final Document subDocument = Jsoup.parse(subContentResponse);
 								
+								final String fragmentName = e.dataset().get("fragment-name");
 								if (fragmentName != null) {
 									final Elements fragments = subDocument.select("div[data-fragment-name=\"" + fragmentName + "\"]");
 									
 									if (fragments != null && fragments.size() > 0) {
+										replaceRelativeRefs(fragments, url);
+										
 										if (fragments.size() == 1) {
-											final Element frag = fragments.first();
-											
-											// need to see if there are images that we need to replace the urls on
-											final Elements images = frag.select("img");
-											for (final Element i : images) {
-												final String src = i.attr("src");
-												if (src.startsWith("/") && !src.startsWith("//")) {
-													i.attr("src", "/cui-req://" + protocol + "://" + service + src);
-												} // else what do we do about relative urls?
-											}
-											
-											content.append(frag.toString());
-											
+											content.append(fragments.first().toString());
 										}
 										else {
 											for (final Element frag : fragments) {
@@ -112,7 +120,7 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 										}
 									}
 									else {
-										log.debug("Found no matching fragments for [ " + fragmentName + " ]");
+										LOGGER.debug("Found no matching fragments for [ {} ]", fragmentName);
 										if (failQuietly) {
 											content.append("<div class='cui-error'></div>");
 										}
@@ -125,6 +133,9 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 									}
 								}
 								else {
+									final Elements dom = subDocument.select("html");
+									replaceRelativeRefs(dom, url);
+									
 									// take the whole thing and cram it in there!
 									content.append(subDocument.toString());
 								}
@@ -140,7 +151,6 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 									content.append("<div class='cui-error'></div>");
 								}
 							}
-							
 						}
 						else {
 							if (!failQuietly) {
@@ -165,16 +175,18 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 											+ t.getMessage()
 											+ "</span>");
 						}
-						log.warn("Failed replacing content", t);
+						LOGGER.warn("Failed replacing content", t);
 					}
 					
+					final String replaceOuterValue = e.dataset().get("replace-outer");
+					final boolean replaceOuter = replaceOuterValue == null || Boolean.parseBoolean(replaceOuterValue);
 					if (replaceOuter) {
 						// outer element should be replaced by content
 						e.unwrap();
 					}
 				}
 				catch (final MalformedURLException ex) {
-					log.warn("location was invalid: [ " + location + " ]", ex);
+					LOGGER.warn("location was invalid: [ {} ]", location, ex);
 					if (!failQuietly) {
 						content.append("<span class='cui-error'>")
 								.append("Failed getting content from remote service. Reason: data-loc was an invalid location.")
@@ -184,29 +196,50 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 						content.append("<div class='cui-error'></div>");
 					}
 				}
-				
 			}
 			
 			composedBody = doc.toString();
 		}
 		else {
-			log.debug("Document has no replaeable elements. Skipping");
+			LOGGER.debug("Document has no replaceable elements. Skipping");
 		}
 		
 		try {
 			this.addResponseHeaders();
-			if (composedBody != null && !composedBody.isEmpty()) {
-				this.writeResponse(composedBody, this.getMimeType(RequestContext.getCurrentContext()));
-			}
-			else {
-				this.writeResponse(origBody, this.getMimeType(RequestContext.getCurrentContext()));
-			}
+			this.writeResponse(StringUtils.defaultIfEmpty(composedBody, origBody), this.getMimeType(RequestContext.getCurrentContext()));
 		}
 		catch (final Exception ex) {
-			log.error("Error sending response", ex);
-			
+			LOGGER.error("Error sending response", ex);
 		}
 		return null;
+	}
+	
+	private static void replaceRelativeRefs(final Elements fragments, final URL url) {
+		final Element frag = fragments.first();
+		
+		for (final Tuple sl : SERVICE_LOCATIONS) {
+			// need to see if there are node attributes that we need to replace the urls on
+			final Elements elements = frag.select(sl.node);
+			for (final Element element : elements) {
+				final String src = element.attr(sl.attribute);
+				if (src.startsWith("/") && !src.startsWith("//")) {
+					final String uri = buildServiceUri(url, src);
+					element.attr(sl.attribute, uri);
+					
+					LOGGER.trace("Replacing relative reference '{}' with service location '{}'", src, uri);
+				}
+			}
+		}
+	}
+	
+	private static String buildServiceUri(final URL url, final String sourceRef) {
+		return new StringBuilder()
+				.append("/cui-req://")
+				.append(url.getProtocol())
+				.append("://")
+				.append(url.getHost())
+				.append(sourceRef)
+				.toString();
 	}
 	
 	protected static boolean hasReplaceableElements(final Document doc) {
