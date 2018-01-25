@@ -5,22 +5,24 @@
  */
 package net.acesinc.convergentui.content;
 
-import com.netflix.zuul.constants.ZuulHeaders;
-import com.netflix.zuul.context.RequestContext;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.zip.GZIPInputStream;
-import javax.annotation.PostConstruct;
+import java.util.zip.ZipException;
+
 import javax.servlet.http.HttpServletResponse;
+
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cloud.client.loadbalancer.LoadBalanced;
-import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+
+import com.netflix.zuul.constants.ZuulHeaders;
+import com.netflix.zuul.context.RequestContext;
 
 /**
  * The Content Service is responsible for getting all the content.
@@ -35,16 +37,15 @@ import org.springframework.web.client.RestTemplate;
 @Service
 public class ContentService {
 	
-	private static final Logger log = LoggerFactory.getLogger(ContentService.class);
+	private static final Logger LOGGER = LoggerFactory.getLogger(ContentService.class);
+	
+	private final RestTemplate restTemplate;
 	
 	@Autowired
-	private RestTemplate restTemplate;
-	
-	@PostConstruct
-	public void setup() {
-		// We have to add some extra special handlers.
-		restTemplate.getMessageConverters().add(new BufferedImageHttpMessageConverter());
-		restTemplate.getMessageConverters().add(new TextHttpMessageConverter());
+	public ContentService(final RestTemplate restTemplate) {
+		this.restTemplate = restTemplate;
+		this.restTemplate.getMessageConverters().add(new BufferedImageHttpMessageConverter());
+		this.restTemplate.getMessageConverters().add(new TextHttpMessageConverter());
 	}
 	
 	/**
@@ -58,8 +59,8 @@ public class ContentService {
 	 *            THe RequestContext for this request
 	 * @return The content returned from the service as a string.
 	 */
-	public ContentResponse getContentFromService(String location, String cacheName, RequestContext context) {
-		return getContentFromService(location, cacheName, true, context);
+	public ContentResponse getContentFromService(final String location, final String cacheName, final RequestContext context) {
+		return this.getContentFromService(location, cacheName, true, context);
 	}
 	
 	/**
@@ -83,74 +84,64 @@ public class ContentService {
 	 * @return The content returned from the service as a string.
 	 */
 	@Cacheable(value = "service-content", key = "#cacheName", unless = "!#useCache or #result.error")
-	public ContentResponse getContentFromService(String location, String cacheName, boolean useCache, RequestContext context) {
-		ContentFetchCommand fetcher = new ContentFetchCommand(location, context, restTemplate);
+	public ContentResponse getContentFromService(
+			final String location,
+			final String cacheName,
+			final boolean useCache,
+			final RequestContext context) {
+		final ContentFetchCommand fetcher = new ContentFetchCommand(location, context, this.restTemplate);
 		return fetcher.execute();
 	}
 	
-	public String getDownstreamResponse() {
-		RequestContext context = RequestContext.getCurrentContext();
-		// there is no body to send
+	public static String getDownstreamResponse() {
+		final RequestContext context = RequestContext.getCurrentContext();
 		if (context.getResponseBody() == null && context.getResponseDataStream() == null) {
 			return null;
 		}
 		
-		String body = null;
 		if (RequestContext.getCurrentContext().getResponseBody() != null) {
-			body = RequestContext.getCurrentContext().getResponseBody();
+			return RequestContext.getCurrentContext().getResponseBody();
 		}
-		else {
-			try {
-				HttpServletResponse servletResponse = context.getResponse();
-				servletResponse.setCharacterEncoding("UTF-8");
-				InputStream is = null;
-				
-				boolean isGzipRequested = false;
-				final String requestEncoding = context.getRequest().getHeader(
-						ZuulHeaders.ACCEPT_ENCODING);
-				if (requestEncoding != null && requestEncoding.equals("gzip")) {
-					isGzipRequested = true;
-				}
-				is = context.getResponseDataStream();
-				InputStream inputStream = is;
-				if (is != null) {
-					if (context.sendZuulResponse()) {
-						// if origin response is gzipped, and client has not requested gzip,
-						// decompress stream
-						// before sending to client
-						// else, stream gzip directly to client
-						if (context.getResponseGZipped() && !isGzipRequested) {
-							try {
-								inputStream = new GZIPInputStream(is);
-							}
-							catch (java.util.zip.ZipException ex) {
-								System.out.println(
-										"gzip expected but not "
-												+ "received assuming unencoded response"
-												+ RequestContext.getCurrentContext()
-														.getRequest()
-														.getRequestURL()
-														.toString());
-								inputStream = is;
-							}
+		try {
+			final HttpServletResponse servletResponse = context.getResponse();
+			servletResponse.setCharacterEncoding("UTF-8");
+			
+			boolean isGzipRequested = false;
+			final String requestEncoding = context.getRequest().getHeader(ZuulHeaders.ACCEPT_ENCODING);
+			if (requestEncoding != null && requestEncoding.equals("gzip")) {
+				isGzipRequested = true;
+			}
+			
+			final InputStream is = context.getResponseDataStream();
+			InputStream inputStream = is;
+			if (is != null) {
+				if (context.sendZuulResponse()) {
+					// if origin response is gzipped, and client has not requested gzip,
+					// decompress stream
+					// before sending to client
+					// else, stream gzip directly to client
+					if (context.getResponseGZipped() && !isGzipRequested) {
+						try {
+							inputStream = new GZIPInputStream(is);
 						}
-						else if (context.getResponseGZipped() && isGzipRequested) {
-							servletResponse.setHeader(ZuulHeaders.CONTENT_ENCODING, "gzip");
+						catch (final ZipException ex) {
+							LOGGER.error(
+									"gzip expected but not received, assuming unencoded response: {}",
+									RequestContext.getCurrentContext().getRequest().getRequestURL());
+							inputStream = is;
 						}
-						body = IOUtils.toString(inputStream, "utf8");
 					}
+					else if (context.getResponseGZipped() && isGzipRequested) {
+						servletResponse.setHeader(ZuulHeaders.CONTENT_ENCODING, "gzip");
+					}
+					return IOUtils.toString(inputStream, StandardCharsets.UTF_8.displayName());
 				}
 			}
-			catch (IOException ioe) {
-				log.warn("IOException getting output stream", ioe);
-			}
 		}
-		return body;
-	}
-	
-	@LoadBalanced
-	@Bean
-	public RestTemplate restTemplate() {
-		return new RestTemplate();
+		catch (final IOException ioe) {
+			LOGGER.warn("IOException getting output stream", ioe);
+		}
+		
+		return null;
 	}
 }

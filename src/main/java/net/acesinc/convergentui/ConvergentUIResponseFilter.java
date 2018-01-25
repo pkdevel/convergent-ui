@@ -1,8 +1,3 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package net.acesinc.convergentui;
 
 import java.net.MalformedURLException;
@@ -26,28 +21,8 @@ import static java.util.Arrays.asList;
 import net.acesinc.convergentui.content.ContentResponse;
 import net.acesinc.convergentui.content.ContentService;
 
-/**
- * The ConvergentUIResponseFilter handles the html coming back from your main
- * service and will replace content with your template.
- *
- * @author andrewserff
- */
 @Component
 public class ConvergentUIResponseFilter extends BaseResponseFilter {
-	
-	static final class Tuple {
-		
-		String node, attribute;
-		
-		private Tuple(final String node, final String attribute) {
-			this.node = node;
-			this.attribute = attribute;
-		}
-		
-		static Tuple of(final String node, final String attribute) {
-			return new Tuple(node, attribute);
-		}
-	}
 	
 	private static final Logger LOGGER = LoggerFactory.getLogger(ConvergentUIResponseFilter.class);
 	
@@ -56,13 +31,16 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 			Tuple.of("script", "src"),
 			Tuple.of("link", "href"));
 	
+	private final ContentService contentManager;
+	
 	@Autowired
-	private ContentService contentManager;
+	public ConvergentUIResponseFilter(final ContentService contentManager) {
+		this.contentManager = contentManager;
+	}
 	
 	@Override
 	public Object run() {
-		
-		final String origBody = this.contentManager.getDownstreamResponse();
+		final String origBody = ContentService.getDownstreamResponse();
 		if (origBody == null || origBody.isEmpty()) {
 			return null;
 		}
@@ -85,7 +63,7 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 					// validation of service location uri
 					final URL url = new URL(location);
 					
-					LOGGER.debug("Fetching content at location [ " + location + " ] with cacheName = [ " + cacheName + " ]");
+					LOGGER.debug("Fetching content at location [ {} ] with cacheName = [ {} ]", location, cacheName);
 					
 					try {
 						final RequestContext context = RequestContext.getCurrentContext();
@@ -205,8 +183,8 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 		}
 		
 		try {
-			this.addResponseHeaders();
-			this.writeResponse(StringUtils.defaultIfEmpty(composedBody, origBody), this.getMimeType(RequestContext.getCurrentContext()));
+			addResponseHeaders();
+			writeResponse(StringUtils.defaultIfEmpty(composedBody, origBody), getMimeType(RequestContext.getCurrentContext()));
 		}
 		catch (final Exception ex) {
 			LOGGER.error("Error sending response", ex);
@@ -244,5 +222,19 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 	
 	protected static boolean hasReplaceableElements(final Document doc) {
 		return doc.select("div[data-loc]").size() > 0;
+	}
+	
+	static final class Tuple {
+		
+		String node, attribute;
+		
+		private Tuple(final String node, final String attribute) {
+			this.node = node;
+			this.attribute = attribute;
+		}
+		
+		static Tuple of(final String node, final String attribute) {
+			return new Tuple(node, attribute);
+		}
 	}
 }

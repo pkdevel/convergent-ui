@@ -7,9 +7,9 @@ package net.acesinc.convergentui.content;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
+
 import javax.imageio.ImageIO;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpInputMessage;
@@ -27,18 +27,14 @@ public class BufferedImageHttpMessageConverter extends AbstractHttpMessageConver
 	private static final Logger log = LoggerFactory.getLogger(BufferedImageHttpMessageConverter.class);
 	
 	@Override
-	public boolean canRead(Class<?> type, MediaType mt) {
+	public boolean canRead(final Class<?> type, final MediaType mt) {
 		log.debug("Can we read: Class[ " + type + "] & ContentType[ " + mt + " ]");
-		if (BufferedImage.class.isAssignableFrom(type) || (mt != null && "image".equalsIgnoreCase(mt.getType()))) {
-			return true;
-		}
-		else {
-			return false;
-		}
+		
+		return BufferedImage.class.isAssignableFrom(type) || mt != null && "image".equalsIgnoreCase(mt.getType());
 	}
 	
 	@Override
-	protected boolean supports(Class<?> type) {
+	protected boolean supports(final Class<?> type) {
 		// I don't believe this is actually used because we overrode canRead
 		// return BufferedImage.class.isAssignableFrom(type);
 		return true;
@@ -46,14 +42,13 @@ public class BufferedImageHttpMessageConverter extends AbstractHttpMessageConver
 	
 	@Override
 	protected BufferedImage readInternal(
-			Class<? extends BufferedImage> type,
-			HttpInputMessage inputMessage) throws IOException, HttpMessageNotReadableException {
+			final Class<? extends BufferedImage> type,
+			final HttpInputMessage inputMessage) throws IOException, HttpMessageNotReadableException {
 		return ImageIO.read(inputMessage.getBody());
 	}
 	
 	@Override
-	protected void writeInternal(BufferedImage t, HttpOutputMessage hom) throws IOException, HttpMessageNotWritableException {
+	protected void writeInternal(final BufferedImage t, final HttpOutputMessage hom) throws IOException, HttpMessageNotWritableException {
 		throw new UnsupportedOperationException("Not supported yet."); // To change body of generated methods, choose Tools | Templates.
 	}
-	
 }
