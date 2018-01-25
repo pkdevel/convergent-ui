@@ -11,30 +11,30 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- *
  * @author andrewserff
  */
-public abstract class BaseRequestFilter extends BaseFilter  {
-
-    private static final Logger log = LoggerFactory.getLogger(BaseRequestFilter.class);
-    
-    @Override
-    public String filterType() {
-        return "pre";
-    }
-
-    @Override
-    public int filterOrder() {
-        return 1;
-    }
-
-    /**
-     * Only filter on GET requests and if the requests conform to the ConvergentUI request format
-     * @return true if we should filter
-     */
-    @Override
-    public boolean shouldFilter() {
-        HttpServletRequest req = RequestContext.getCurrentContext().getRequest();
-        return "GET".equalsIgnoreCase(getVerb(req)) && isConvergentUIRequest(req);
-    }
+public abstract class BaseRequestFilter extends BaseFilter {
+	
+	private static final Logger log = LoggerFactory.getLogger(BaseRequestFilter.class);
+	
+	@Override
+	public String filterType() {
+		return "pre";
+	}
+	
+	@Override
+	public int filterOrder() {
+		return 1;
+	}
+	
+	/**
+	 * Only filter on GET requests and if the requests conform to the ConvergentUI request format
+	 * 
+	 * @return true if we should filter
+	 */
+	@Override
+	public boolean shouldFilter() {
+		HttpServletRequest req = RequestContext.getCurrentContext().getRequest();
+		return "GET".equalsIgnoreCase(getVerb(req)) && isConvergentUIRequest(req);
+	}
 }
