@@ -205,8 +205,8 @@ public class ConvergentUIResponseFilter extends BaseResponseFilter {
 		}
 		
 		try {
-			this.addResponseHeaders();
-			this.writeResponse(StringUtils.defaultIfEmpty(composedBody, origBody), this.getMimeType(RequestContext.getCurrentContext()));
+			addResponseHeaders();
+			writeResponse(StringUtils.defaultIfEmpty(composedBody, origBody), getMimeType(RequestContext.getCurrentContext()));
 		}
 		catch (final Exception ex) {
 			LOGGER.error("Error sending response", ex);
