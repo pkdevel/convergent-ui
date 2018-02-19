@@ -5,38 +5,12 @@
  */
 package net.acesinc.convergentui;
 
-import com.netflix.config.DynamicBooleanProperty;
-import com.netflix.config.DynamicIntProperty;
-import com.netflix.config.DynamicPropertyFactory;
-import com.netflix.zuul.constants.ZuulConstants;
 import com.netflix.zuul.context.RequestContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * @author andrewserff
  */
 public abstract class BaseResponseFilter extends BaseFilter {
-	
-	private static final Logger log = LoggerFactory.getLogger(BaseResponseFilter.class);
-	
-	private static DynamicBooleanProperty INCLUDE_DEBUG_HEADER = DynamicPropertyFactory
-			.getInstance()
-			.getBooleanProperty(
-					ZuulConstants.ZUUL_INCLUDE_DEBUG_HEADER,
-					false);
-	
-	private static DynamicIntProperty INITIAL_STREAM_BUFFER_SIZE = DynamicPropertyFactory
-			.getInstance()
-			.getIntProperty(
-					ZuulConstants.ZUUL_INITIAL_STREAM_BUFFER_SIZE,
-					1024);
-	
-	private static DynamicBooleanProperty SET_CONTENT_LENGTH = DynamicPropertyFactory
-			.getInstance()
-			.getBooleanProperty(
-					ZuulConstants.ZUUL_SET_CONTENT_LENGTH,
-					false);
 	
 	@Override
 	public String filterType() {
@@ -50,9 +24,9 @@ public abstract class BaseResponseFilter extends BaseFilter {
 	
 	@Override
 	public boolean shouldFilter() {
-		RequestContext ctx = RequestContext.getCurrentContext();
-		String contentType = getContentType(ctx);
-		String verb = getVerb(ctx.getRequest());
+		final RequestContext ctx = RequestContext.getCurrentContext();
+		final String contentType = getContentType(ctx);
+		final String verb = getVerb(ctx.getRequest());
 		
 		return "text/html".equals(contentType)
 				&& "GET".equalsIgnoreCase(verb)

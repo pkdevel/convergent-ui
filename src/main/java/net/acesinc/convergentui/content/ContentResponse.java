@@ -1,17 +1,12 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package net.acesinc.convergentui.content;
 
 import java.io.Serializable;
+
 import org.springframework.http.MediaType;
 
-/**
- * @author andrewserff
- */
 public class ContentResponse implements Serializable {
+	
+	private static final long serialVersionUID = -1641266191562236026L;
 	
 	private Object content;
 	
@@ -23,71 +18,41 @@ public class ContentResponse implements Serializable {
 	
 	@Override
 	public String toString() {
-		if (error) {
-			return "Content has ERROR: " + message + " \nContent: " + content;
+		if (this.error) {
+			return "Content has ERROR: " + this.message + " \nContent: " + this.content;
 		}
-		else {
-			return "Content: " + content;
-		}
+		return "Content: " + this.content;
 	}
 	
-	/**
-	 * @return the content
-	 */
 	public Object getContent() {
-		return content;
+		return this.content;
 	}
 	
-	/**
-	 * @param content
-	 *            the content to set
-	 */
-	public void setContent(Object content) {
+	public void setContent(final Object content) {
 		this.content = content;
 	}
 	
-	/**
-	 * @return the error
-	 */
 	public boolean isError() {
-		return error;
+		return this.error;
 	}
 	
-	/**
-	 * @param error
-	 *            the error to set
-	 */
-	public void setError(boolean error) {
+	public void setError(final boolean error) {
 		this.error = error;
 	}
 	
-	/**
-	 * @return the message
-	 */
 	public String getMessage() {
-		return message;
+		return this.message;
 	}
 	
-	/**
-	 * @param message
-	 *            the message to set
-	 */
-	public void setMessage(String message) {
+	public void setMessage(final String message) {
 		this.message = message;
 	}
 	
-	/**
-	 * @return the contentType
-	 */
 	public MediaType getContentType() {
-		return contentType;
+		return this.contentType;
 	}
 	
-	/**
-	 * @param contentType
-	 *            the contentType to set
-	 */
-	public void setContentType(MediaType contentType) {
+	public void setContentType(final MediaType contentType) {
 		this.contentType = contentType;
 	}
 }

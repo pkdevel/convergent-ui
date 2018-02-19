@@ -1,13 +1,9 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package net.acesinc.convergentui;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -69,7 +65,7 @@ public abstract class BaseFilter extends ZuulFilter {
 	protected static String getContentType(final RequestContext context) {
 		final MimeType type = getMimeType(context);
 		if (type != null) {
-			return type.getType() + "/" + type.getSubtype();
+			return type.getType().concat("/").concat(type.getSubtype());
 		}
 		return "unknown";
 	}
@@ -85,7 +81,8 @@ public abstract class BaseFilter extends ZuulFilter {
 		servletResponse.setContentType(contentType.toString());
 		
 		try (final OutputStream outStream = servletResponse.getOutputStream()) {
-			writeResponse(new ByteArrayInputStream(responseBody.getBytes()), outStream);
+			IOUtils.copy(new ByteArrayInputStream(responseBody.getBytes()), outStream);
+			outStream.flush();
 		}
 	}
 	
@@ -99,54 +96,39 @@ public abstract class BaseFilter extends ZuulFilter {
 		servletResponse.setContentType(mediaType.toString());
 		
 		try (final ByteArrayOutputStream imageStream = new ByteArrayOutputStream()) {
-			ImageIO.write(image, mediaType.getSubtype(), imageStream);
-			servletResponse.setContentLength(imageStream.size());
-			
-			ImageIO.re
-			
 			try (final OutputStream outStream = servletResponse.getOutputStream()) {
-				
-				
-				IOUtils.copy(imageStream, outStream);
-				
-				try (final InputStream is = new ByteArrayInputStream(imageStream.toByteArray())) {
-					writeResponse(is, outStream);
-				}
+				ImageIO.write(image, mediaType.getSubtype(), outStream);
 				outStream.flush();
 			}
 		}
 	}
 	
-	private static void writeResponse(final InputStream input, final OutputStream output) throws Exception {
-		IOUtils.copy(input, output);
-	}
-	
 	protected static void addResponseHeaders() {
 		final RequestContext context = RequestContext.getCurrentContext();
 		final HttpServletResponse servletResponse = context.getResponse();
-		final List<Pair<String, String>> zuulResponseHeaders = context.getZuulResponseHeaders();
+		
 		@SuppressWarnings("unchecked")
-		final List<String> rd = (List<String>) RequestContext.getCurrentContext().get(
-				"routingDebug");
+		final List<String> rd = (List<String>) RequestContext.getCurrentContext().get("routingDebug");
 		if (rd != null) {
-			final StringBuilder debugHeader = new StringBuilder();
-			for (final String it : rd) {
-				debugHeader.append("[[[" + it + "]]]");
-			}
 			if (INCLUDE_DEBUG_HEADER.get()) {
+				final StringBuilder debugHeader = new StringBuilder();
+				for (final String it : rd) {
+					debugHeader.append("[[[" + it + "]]]");
+				}
 				servletResponse.addHeader("X-Zuul-Debug-Header", debugHeader.toString());
 			}
 		}
+		
+		final List<Pair<String, String>> zuulResponseHeaders = context.getZuulResponseHeaders();
 		if (zuulResponseHeaders != null) {
 			for (final Pair<String, String> it : zuulResponseHeaders) {
 				servletResponse.addHeader(it.first(), it.second());
 			}
 		}
-		final RequestContext ctx = RequestContext.getCurrentContext();
-		final Long contentLength = ctx.getOriginContentLength();
-		// Only inserts Content-Length if origin provides it and origin response is not gzipped
+		
 		if (SET_CONTENT_LENGTH.get()) {
-			if (contentLength != null && !ctx.getResponseGZipped()) {
+			final Long contentLength = context.getOriginContentLength();
+			if (contentLength != null && !context.getResponseGZipped()) {
 				servletResponse.setContentLengthLong(contentLength.longValue());
 			}
 		}

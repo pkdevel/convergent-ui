@@ -5,17 +5,14 @@
  */
 package net.acesinc.convergentui;
 
-import com.netflix.zuul.context.RequestContext;
 import javax.servlet.http.HttpServletRequest;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import com.netflix.zuul.context.RequestContext;
 
 /**
  * @author andrewserff
  */
 public abstract class BaseRequestFilter extends BaseFilter {
-	
-	private static final Logger log = LoggerFactory.getLogger(BaseRequestFilter.class);
 	
 	@Override
 	public String filterType() {
@@ -27,14 +24,9 @@ public abstract class BaseRequestFilter extends BaseFilter {
 		return 1;
 	}
 	
-	/**
-	 * Only filter on GET requests and if the requests conform to the ConvergentUI request format
-	 * 
-	 * @return true if we should filter
-	 */
 	@Override
 	public boolean shouldFilter() {
-		HttpServletRequest req = RequestContext.getCurrentContext().getRequest();
+		final HttpServletRequest req = RequestContext.getCurrentContext().getRequest();
 		return "GET".equalsIgnoreCase(getVerb(req)) && isConvergentUIRequest(req);
 	}
 }

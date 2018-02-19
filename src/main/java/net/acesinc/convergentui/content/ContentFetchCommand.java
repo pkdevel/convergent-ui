@@ -5,11 +5,8 @@
  */
 package net.acesinc.convergentui.content;
 
-import com.netflix.hystrix.HystrixCommand;
-import com.netflix.hystrix.HystrixCommandGroupKey;
-import com.netflix.zuul.context.RequestContext;
-import java.awt.image.BufferedImage;
 import javax.servlet.http.HttpServletRequest;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.netflix.zuul.filters.ProxyRequestHelper;
@@ -20,79 +17,80 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
+import com.netflix.hystrix.HystrixCommand;
+import com.netflix.hystrix.HystrixCommandGroupKey;
+import com.netflix.zuul.context.RequestContext;
+
 /**
  * @author andrewserff
  */
 public class ContentFetchCommand extends HystrixCommand<ContentResponse> {
 	
-	private static final Logger log = LoggerFactory.getLogger(ContentFetchCommand.class);
+	private static final Logger LOGGER = LoggerFactory.getLogger(ContentFetchCommand.class);
 	
-	private RestTemplate restTemplate;
+	private final RestTemplate restTemplate;
 	
-	private ProxyRequestHelper helper;
+	private final ProxyRequestHelper helper;
 	
-	private String location;
+	private final String location;
 	
-	private RequestContext requestContext;
+	private final RequestContext requestContext;
 	
-	public ContentFetchCommand(String location, RequestContext requestContext, RestTemplate restTemplate) {
+	public ContentFetchCommand(final String location, final RequestContext requestContext, final RestTemplate restTemplate) {
 		super(HystrixCommandGroupKey.Factory.asKey("content-fetch"));
 		this.location = location;
 		this.requestContext = requestContext;
 		this.restTemplate = restTemplate;
-		helper = new ProxyRequestHelper();
+		this.helper = new ProxyRequestHelper();
 	}
 	
 	@Override
 	protected ContentResponse run() throws Exception {
-		log.debug("Getting live content from [ " + location + " ]");
+		LOGGER.debug("Getting live content from [ {} ]", this.location);
 		try {
-			HttpServletRequest request = requestContext.getRequest();
-			MultiValueMap<String, String> headers = this.helper
-					.buildZuulRequestHeaders(request);
+			final HttpServletRequest request = this.requestContext.getRequest();
+			final MultiValueMap<String, String> headers = this.helper.buildZuulRequestHeaders(request);
 			
-			if (request.getQueryString() != null && !request.getQueryString().isEmpty()) {
-				MultiValueMap<String, String> params = this.helper
-						.buildZuulRequestQueryParams(request);
-			}
+			// if (request.getQueryString() != null && !request.getQueryString().isEmpty()) {
+			// final MultiValueMap<String, String> params = this.helper.buildZuulRequestQueryParams(request);
+			// }
 			
-			HttpHeaders requestHeaders = new HttpHeaders();
-			for (String key : headers.keySet()) {
-				for (String s : headers.get(key)) {
+			final HttpHeaders requestHeaders = new HttpHeaders();
+			for (final String key : headers.keySet()) {
+				for (final String s : headers.get(key)) {
 					requestHeaders.add(key, s);
 				}
 			}
-			HttpEntity requestEntity = new HttpEntity(null, requestHeaders);
+			final HttpEntity<Object> requestEntity = new HttpEntity<>(null, requestHeaders);
+			final ResponseEntity<Object> exchange = this.restTemplate.exchange(this.location, HttpMethod.GET, requestEntity, Object.class);
 			
-			ResponseEntity<Object> exchange = this.restTemplate.exchange(location, HttpMethod.GET, requestEntity, Object.class);
-			
-			ContentResponse response = new ContentResponse();
+			final ContentResponse response = new ContentResponse();
 			response.setContent(exchange.getBody());
 			response.setContentType(exchange.getHeaders().getContentType());
 			response.setError(false);
 			
 			return response;
 		}
-		catch (Exception e) {
-			log.debug("Error fetching live content from [ " + location + " ]", e);
+		catch (final Exception e) {
+			LOGGER.error("Error fetching live content from [ {} ]", this.location, e);
 			throw e;
 		}
 	}
 	
 	@Override
 	protected ContentResponse getFallback() {
-		log.debug("ContentFetch failed for [ " + location + " ]. Returing fallback response");
-		ContentResponse response = new ContentResponse();
+		LOGGER.debug("ContentFetch failed for [ {} ]. Returing fallback response", this.location);
+		final ContentResponse response = new ContentResponse();
 		response.setContent("");
 		response.setError(true);
 		
-		String defaultErrorMsg = getFailedExecutionException().getMessage();
+		String defaultErrorMsg = this.getFailedExecutionException().getMessage();
 		if (defaultErrorMsg == null || defaultErrorMsg.isEmpty()) {
 			defaultErrorMsg = "Unknown Error";
 		}
 		// see if we can get a better error message
-		Exception errorFromThrowable = getExceptionFromThrowable(getExecutionException());
-		String errMessage = (errorFromThrowable != null) ? errorFromThrowable.getMessage() : defaultErrorMsg;
+		final Exception errorFromThrowable = this.getExceptionFromThrowable(this.getExecutionException());
+		final String errMessage = errorFromThrowable != null ? errorFromThrowable.getMessage() : defaultErrorMsg;
 		
 		response.setMessage(errMessage);
 		return response;
