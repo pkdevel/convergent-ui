@@ -99,24 +99,6 @@
 			<artifactId>netflix-commons-util</artifactId>
 		</dependency>
 	</dependencies>
-	<repositories>
-		<!-- These are set in the settings.xml to our nexus repo -->
-	</repositories>
-	<pluginRepositories>
-		<!-- These are set in the settings.xml to our nexus repo -->
-	</pluginRepositories>
-	<distributionManagement>
-		<snapshotRepository>
-			<id>sonatype-nexus-snapshots</id>
-			<name>Sonatype Nexus snapshot repository</name>
-			<url>https://oss.sonatype.org/content/repositories/snapshots</url>
-		</snapshotRepository>
-		<repository>
-			<id>sonatype-nexus-staging</id>
-			<name>Sonatype Nexus release repository</name>
-			<url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-		</repository>
-	</distributionManagement>
 	<build>
 		<plugins>
 			<plugin>
